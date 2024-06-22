@@ -57,7 +57,7 @@ type RawSocketRelay struct {
 	conn                 rawRelayConn
 	toSendChan           chan []byte
 	stopToSendChan       chan struct{}
-	recvList             *ChanMap
+	recvList             *ChanMultiMap
 	wg                   *sync.WaitGroup
 	cancelFunc           context.CancelFunc
 	recvTimeout          time.Duration
@@ -97,7 +97,7 @@ func NewRawSocketRelayWithRelayConn(parentctx context.Context, ifname string, co
 	ctx, r.cancelFunc = context.WithCancel(parentctx)
 	r.toSendChan = make(chan []byte, r.sendChanDepth)
 
-	r.recvList = NewChanMap()
+	r.recvList = NewChanMultiMap()
 	r.multicastList = NewChanMap()
 	r.stats = newRelayPacketStats()
 	r.wg = new(sync.WaitGroup)
@@ -224,7 +224,7 @@ func (rsr *RawSocketRelay) Register(ks []L2EndpointKey, recvMulticast bool) (cha
 	for i := range ks {
 		list[i] = ks[i]
 	}
-	rsr.recvList.SetList(list, ch)
+	rsr.recvList.PutList(list, ch)
 	if recvMulticast {
 		//NOTE: only set one key in multicast, otherwise the EtherConn will receive multiple copies
 		rsr.multicastList.Set(ks[0], ch)
@@ -435,7 +435,7 @@ func getReceivalFromRcvPkt(p []byte, auxdata []interface{}, relayType RelayType)
 
 // handleRcvPkt is the function handle the received pkt from underlying socket, it is shared code for both RawPacketRelay and XDPPacketRelay
 func handleRcvPkt(relayType RelayType, pktData []byte, stats *RelayPacketStats,
-	logf LogFunc, recvList *ChanMap, mirrorToDefault bool,
+	logf LogFunc, recvList *ChanMultiMap, mirrorToDefault bool,
 	defaultRecvChan chan *RelayReceival, multicastList *ChanMap,
 	ancData []interface{},
 ) {
@@ -451,11 +451,13 @@ func handleRcvPkt(relayType RelayType, pktData []byte, stats *RelayPacketStats,
 	if logf != nil {
 		logf("got pkt with l2epkey %v", recvial.LocalEndpoint.GetKey().String())
 	}
-	if rcvchan := recvList.Get(recvial.LocalEndpoint.GetKey()); rcvchan != nil {
+	if rcvchanList := recvList.Get(recvial.LocalEndpoint.GetKey()); rcvchanList != nil {
 		// found match etherconn
 		//NOTE: create go routine here since sendToChanWithCounter will parse the pkt, need some CPU
 		//NOTE2: update @ 10/15/2021, remove creating go routine, since it will create out-of-order issue
-		sendToChanWithCounter(recvial, rcvchan, stats.Rx, stats.RxBufferFull)
+		for _, rcvchan := range rcvchanList {
+			sendToChanWithCounter(recvial, rcvchan, stats.Rx, stats.RxBufferFull)
+		}
 		if mirrorToDefault && defaultRecvChan != nil {
 			sendToChanWithCounter(recvial, defaultRecvChan, stats.RxDefault, stats.RxBufferFull)
 		}

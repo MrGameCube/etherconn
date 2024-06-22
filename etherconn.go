@@ -411,6 +411,90 @@ func (rr *RelayReceival) GetL4Key() (r L4RecvKey) {
 // 	return fmt.Sprintf("%v:%v:%v", l4ep.IPProtocol, l4ep.IPAddr, l4ep.Port)
 // }
 
+// ChanMultiMap is an GO routine safe multi map, key is interfce{}, val is a chan *RelayReceival;
+type ChanMultiMap struct {
+	cmlist map[interface{}][]chan *RelayReceival
+	lock   *sync.RWMutex
+}
+
+// NewChanMap creates a new instance of ChanMap
+func NewChanMultiMap() *ChanMultiMap {
+	r := &ChanMultiMap{}
+	r.cmlist = make(map[interface{}][]chan *RelayReceival)
+	r.lock = &sync.RWMutex{}
+	return r
+}
+
+// CloseAll close all channel in cm
+func (cm *ChanMultiMap) CloseAll() {
+	cm.lock.Lock()
+	for _, cL := range cm.cmlist {
+		for _, c := range cL {
+			close(c)
+		}
+	}
+	cm.lock.Unlock()
+}
+
+// Set (k,v) into cm
+func (cm *ChanMultiMap) Put(k interface{}, v chan *RelayReceival) {
+	cm.lock.Lock()
+	cm.put(k, v)
+	cm.lock.Unlock()
+}
+
+// Set (k,v) into cm
+func (cm *ChanMultiMap) put(k interface{}, v chan *RelayReceival) {
+	_, has := cm.cmlist[k]
+	if !has {
+		cm.cmlist[k] = make([]chan *RelayReceival, 2)
+	}
+	cm.cmlist[k] = append(cm.cmlist[k], v)
+}
+
+// SetList set a (k,v) into cm for each k in ks
+func (cm *ChanMultiMap) PutList(ks []interface{}, v chan *RelayReceival) {
+	cm.lock.Lock()
+	for _, k := range ks {
+		cm.put(k, v)
+	}
+	cm.lock.Unlock()
+}
+
+// Get return the channel map to k
+func (cm *ChanMultiMap) Get(k interface{}) []chan *RelayReceival {
+	cm.lock.RLock()
+	defer cm.lock.RUnlock()
+	return cm.cmlist[k]
+}
+
+// Del delete entry with key as k
+func (cm *ChanMultiMap) Del(k interface{}) {
+	cm.lock.Lock()
+	delete(cm.cmlist, k)
+	cm.lock.Unlock()
+}
+
+// DelList deletes entries with key as k in ks
+func (cm *ChanMultiMap) DelList(ks []interface{}) {
+	cm.lock.Lock()
+	for _, k := range ks {
+		delete(cm.cmlist, k)
+	}
+	cm.lock.Unlock()
+}
+
+// GetList return all channels in cm
+func (cm *ChanMultiMap) GetList() [][]chan *RelayReceival {
+	rlist := [][]chan *RelayReceival{}
+	cm.lock.RLock()
+	for _, c := range cm.cmlist {
+		rlist = append(rlist, c)
+	}
+	cm.lock.RUnlock()
+	return rlist
+}
+
 // ChanMap is an GO routine safe map, key is interfce{}, val is a chan *RelayReceival;
 type ChanMap struct {
 	cmlist map[interface{}]chan *RelayReceival

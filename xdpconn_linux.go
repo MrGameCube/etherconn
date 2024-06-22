@@ -267,7 +267,7 @@ type XDPRelay struct {
 	extBPFProgFileName, extBPFProgName, extBPFQMapName, extBPFSocketMapName, extBPFEtypeMapName string
 	toSendChan                                                                                  chan []byte
 	stopToSendChan                                                                              chan struct{}
-	recvList                                                                                    *ChanMap
+	recvList                                                                                    *ChanMultiMap
 	wg                                                                                          *sync.WaitGroup
 	cancelFunc                                                                                  context.CancelFunc
 	recvTimeout                                                                                 time.Duration
@@ -428,7 +428,7 @@ func NewXDPRelay(parentctx context.Context, ifname string, options ...XDPRelayOp
 		sendChanDepth:        DefaultSendChanDepth,
 		maxEtherFrameSize:    DefaultXDPChunkSize,
 		umemNumofTrunk:       DefaultXDPUMEMNumOfTrunk,
-		recvList:             NewChanMap(),
+		recvList:             NewChanMultiMap(),
 		multicastList:        NewChanMap(),
 		stats:                newRelayPacketStats(),
 		wg:                   new(sync.WaitGroup),
@@ -570,7 +570,7 @@ func (xr *XDPRelay) Register(ks []L2EndpointKey, recvMulticast bool) (chan *Rela
 	for i := range ks {
 		list[i] = ks[i]
 	}
-	xr.recvList.SetList(list, ch)
+	xr.recvList.PutList(list, ch)
 	if recvMulticast {
 		//NOTE: only set one key in multicast, otherwise the EtherConn will receive multiple copies
 		xr.multicastList.Set(ks[0], ch)

@@ -447,7 +447,7 @@ func (cm *ChanMultiMap) Put(k interface{}, v chan *RelayReceival) {
 func (cm *ChanMultiMap) put(k interface{}, v chan *RelayReceival) {
 	_, has := cm.cmlist[k]
 	if !has {
-		cm.cmlist[k] = make([]chan *RelayReceival, 2)
+		cm.cmlist[k] = make([]chan *RelayReceival, 0, 2)
 	}
 	cm.cmlist[k] = append(cm.cmlist[k], v)
 }

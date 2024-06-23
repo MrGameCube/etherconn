@@ -456,6 +456,9 @@ func handleRcvPkt(relayType RelayType, pktData []byte, stats *RelayPacketStats,
 		//NOTE: create go routine here since sendToChanWithCounter will parse the pkt, need some CPU
 		//NOTE2: update @ 10/15/2021, remove creating go routine, since it will create out-of-order issue
 		for _, rcvchan := range rcvchanList {
+			if rcvchan == nil {
+				continue
+			}
 			sendToChanWithCounter(recvial, rcvchan, stats.Rx, stats.RxBufferFull)
 		}
 		if mirrorToDefault && defaultRecvChan != nil {
